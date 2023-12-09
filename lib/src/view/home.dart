@@ -21,13 +21,23 @@ class _HomeState extends State<Home> {
   double newVideoSizeHeight = 480;
 
   late bool isLandscape;
+  late bool isToggle;
+  late bool detected;
+  // late ObjectDetector _detector;
   // late String _timeString;
   final _globalKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
+    // _detector = ObjectDetector(
+    //     options: ObjectDetectorOptions(
+    //         mode: DetectionMode.stream,
+    //         classifyObjects: true,
+    //         multipleObjects: true));
     isLandscape = false;
+    // isToggle = false;
+    // detected = false;
   }
 
   @override
@@ -35,6 +45,33 @@ class _HomeState extends State<Home> {
     widget.channel.sink.close();
     super.dispose();
   }
+
+  // void detect(Uint8List bytes) {
+  //   if (isToggle) return;
+  //   isToggle = true;
+  //   _detector
+  //       .processImage(InputImage.fromBytes(
+  //           bytes: bytes,
+  //           metadata: InputImageMetadata(
+  //               size: Size(videoWidth, videoHeight),
+  //               rotation: InputImageRotation.rotation0deg,
+  //               format: InputImageFormat.yv12,
+  //               bytesPerRow: 1000)))
+  //       .then((result) {
+  //     if (result.isNotEmpty) {
+  //       setState(() {
+  //         detected = true;
+  //         debugPrint("사람얼굴 등장");
+  //       });
+  //     } else {
+  //       setState(() {
+  //         detected = false;
+  //         debugPrint("사람이 아님");
+  //       });
+  //     }
+  //     isToggle = false;
+  //   });
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -60,12 +97,14 @@ class _HomeState extends State<Home> {
           child: StreamBuilder(
             stream: widget.channel.stream,
             builder: (context, snapshot) {
+              // ConnectionState가 done일 때만 Navigator.pushReplacement 호출
               if (snapshot.connectionState == ConnectionState.done) {
-                Future.delayed(Duration(milliseconds: 100)).then((_) {
+                Future.delayed(const Duration(milliseconds: 100)).then((_) {
                   Navigator.pushReplacement(
                       context,
                       MaterialPageRoute(
-                          builder: (BuildContext context) => WifiCheck()));
+                          builder: (BuildContext context) =>
+                              const WifiCheck()));
                 });
               }
 
@@ -76,6 +115,7 @@ class _HomeState extends State<Home> {
                   ),
                 );
               } else {
+                // detect(snapshot.data);
                 return Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: <Widget>[
@@ -84,14 +124,11 @@ class _HomeState extends State<Home> {
                         SizedBox(
                           height: isLandscape ? 0 : 30,
                         ),
-                        RepaintBoundary(
-                          key: _globalKey,
-                          child: Image.memory(
-                            snapshot.data,
-                            gaplessPlayback: true,
-                            width: newVideoSizeWidth,
-                            height: newVideoSizeHeight,
-                          ),
+                        Image.memory(
+                          snapshot.data,
+                          gaplessPlayback: true,
+                          width: newVideoSizeWidth,
+                          height: newVideoSizeHeight,
                         ),
                       ],
                     ),

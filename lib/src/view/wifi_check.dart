@@ -28,7 +28,7 @@ class _WifiCheckState extends State<WifiCheck> {
   @override
   void initState() {
     super.initState();
-    isTargetSSID = false;
+    // isTargetSSID = false;
     isDiscovering = false;
 
     initConnectivity();
@@ -107,6 +107,11 @@ class _WifiCheckState extends State<WifiCheck> {
       return Future.value(null);
     }
 
+    // 초기화 시에만 isTargetSSID를 업데이트
+    setState(() {
+      isTargetSSID = result == ConnectivityResult.wifi;
+    });
+
     return _updateConnectionStatus(result);
   }
 
@@ -114,7 +119,7 @@ class _WifiCheckState extends State<WifiCheck> {
     switch (result) {
       case ConnectivityResult.wifi:
         print("WIFI ****");
-        String? wifiIP; 
+        String? wifiIP;
         try {
           wifiIP = await _wifiInfo.getWifiIP();
         } on PlatformException catch (e) {
