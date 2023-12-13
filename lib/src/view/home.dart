@@ -1,13 +1,14 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
-import 'package:esp32_cam_with_open_cv/src/view/wifi_check.dart';
 import 'package:flutter/material.dart';
+import 'package:google_ml_kit/google_ml_kit.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class Home extends StatefulWidget {
   final WebSocketChannel channel;
 
-  const Home({super.key, required this.channel});
+  const Home({Key? key, required this.channel}) : super(key: key);
 
   @override
   _HomeState createState() => _HomeState();
@@ -16,62 +17,59 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> {
   final double videoWidth = 640;
   final double videoHeight = 480;
-
-  double newVideoSizeWidth = 640;
-  double newVideoSizeHeight = 480;
-
   late bool isLandscape;
   late bool isToggle;
   late bool detected;
-  // late ObjectDetector _detector;
-  // late String _timeString;
-  final _globalKey = GlobalKey();
+
+  GoogleMlKit vision = GoogleMlKit.vision as GoogleMlKit;
+  late FaceDetector faceDetector;
+  List<Face> faces = [];
 
   @override
   void initState() {
     super.initState();
-    // _detector = ObjectDetector(
-    //     options: ObjectDetectorOptions(
-    //         mode: DetectionMode.stream,
-    //         classifyObjects: true,
-    //         multipleObjects: true));
     isLandscape = false;
-    // isToggle = false;
-    // detected = false;
+    isToggle = false;
+    detected = false;
+    faceDetector = GoogleMlKit.vision.faceDetector();
   }
 
   @override
   void dispose() {
     widget.channel.sink.close();
+    faceDetector.close();
     super.dispose();
   }
 
-  // void detect(Uint8List bytes) {
-  //   if (isToggle) return;
-  //   isToggle = true;
-  //   _detector
-  //       .processImage(InputImage.fromBytes(
-  //           bytes: bytes,
-  //           metadata: InputImageMetadata(
-  //               size: Size(videoWidth, videoHeight),
-  //               rotation: InputImageRotation.rotation0deg,
-  //               format: InputImageFormat.yv12,
-  //               bytesPerRow: 1000)))
-  //       .then((result) {
-  //     if (result.isNotEmpty) {
-  //       setState(() {
-  //         detected = true;
-  //         debugPrint("사람얼굴 등장");
-  //       });
-  //     } else {
-  //       setState(() {
-  //         detected = false;
-  //         debugPrint("사람이 아님");
-  //       });
-  //     }
-  //     isToggle = false;
-  //   });
-  // }
+  Future<List<Face>> detectFaces(ui.Image image) async {
+    final byteData = await image.toByteData();
+    if (byteData == null) {
+      // 널 데이터 처리
+      return [];
+    }
+
+    final detectedFaces =
+        await faceDetector.processImage(byteData as InputImage);
+    return detectedFaces;
+  }
+
+  void startFaceDetection() async {
+    final imageBytes = await widget.channel.stream.first;
+    final codec = await ui.instantiateImageCodec(imageBytes);
+    final frame = await codec.getNextFrame();
+    final image = frame.image;
+
+    final byteData = await image.toByteData();
+    final detectedFaces =
+        await faceDetector.processImage(byteData as InputImage);
+
+    setState(() {
+      faces = detectedFaces;
+      detected = true;
+    });
+
+    startFaceDetection(); // 계속해서 얼굴 인식을 수행하도록 재귀 호출
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,15 +79,19 @@ class _HomeState extends State<Home> {
         var screenHeight = MediaQuery.of(context).size.height;
 
         if (orientation == Orientation.portrait) {
-          //screenWidth < screenHeight
-
           isLandscape = false;
-          newVideoSizeWidth = screenWidth;
-          newVideoSizeHeight = videoHeight * newVideoSizeWidth / videoWidth;
         } else {
           isLandscape = true;
-          newVideoSizeHeight = screenHeight;
-          newVideoSizeWidth = videoWidth * newVideoSizeHeight / videoHeight;
+        }
+
+        final newVideoSizeWidth =
+            isLandscape ? screenWidth : videoWidth * screenWidth / videoWidth;
+        final newVideoSizeHeight = isLandscape
+            ? screenHeight
+            : videoHeight * screenHeight / videoHeight;
+
+        if (!detected) {
+          startFaceDetection(); // 얼굴 인식 시작
         }
 
         return Container(
@@ -97,17 +99,6 @@ class _HomeState extends State<Home> {
           child: StreamBuilder(
             stream: widget.channel.stream,
             builder: (context, snapshot) {
-              // ConnectionState가 done일 때만 Navigator.pushReplacement 호출
-              if (snapshot.connectionState == ConnectionState.done) {
-                Future.delayed(const Duration(milliseconds: 100)).then((_) {
-                  Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(
-                          builder: (BuildContext context) =>
-                              const WifiCheck()));
-                });
-              }
-
               if (!snapshot.hasData) {
                 return const Center(
                   child: CircularProgressIndicator(
@@ -115,24 +106,14 @@ class _HomeState extends State<Home> {
                   ),
                 );
               } else {
-                // detect(snapshot.data);
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: <Widget>[
-                    Column(
-                      children: <Widget>[
-                        SizedBox(
-                          height: isLandscape ? 0 : 30,
-                        ),
-                        Image.memory(
-                          snapshot.data,
-                          gaplessPlayback: true,
-                          width: newVideoSizeWidth,
-                          height: newVideoSizeHeight,
-                        ),
-                      ],
-                    ),
-                  ],
+                return CustomPaint(
+                  foregroundPainter: FacePainter(faces),
+                  child: Image.memory(
+                    snapshot.data,
+                    gaplessPlayback: true,
+                    width: newVideoSizeWidth,
+                    height: newVideoSizeHeight,
+                  ),
                 );
               }
             },
@@ -140,5 +121,39 @@ class _HomeState extends State<Home> {
         );
       }),
     );
+  }
+}
+
+class FacePainter extends CustomPainter {
+  final List<Face> faces;
+
+  FacePainter(this.faces);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double scaleX = size.width;
+    final double scaleY = size.height;
+
+    for (Face face in faces) {
+      final rect = Rect.fromLTRB(
+        face.boundingBox.left * scaleX,
+        face.boundingBox.top * scaleY,
+        face.boundingBox.right * scaleX,
+        face.boundingBox.bottom * scaleY,
+      );
+
+      canvas.drawRect(
+        rect,
+        Paint()
+          ..color = Colors.red
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3.0,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(FacePainter oldDelegate) {
+    return oldDelegate.faces != faces;
   }
 }
