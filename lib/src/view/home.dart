@@ -133,36 +133,36 @@ class _HomeState extends State<Home> {
   }
 }
 
-class FacePainter extends CustomPainter {
-  final List<Face> faces;
+// class FacePainter extends CustomPainter {
+//   final List<Face> faces;
 
-  FacePainter(this.faces);
+//   FacePainter(this.faces);
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final double scaleX = size.width;
-    final double scaleY = size.height;
+//   @override
+//   void paint(Canvas canvas, Size size) {
+//     final double scaleX = size.width;
+//     final double scaleY = size.height;
 
-    for (Face face in faces) {
-      final rect = Rect.fromLTRB(
-        face.boundingBox.left * scaleX,
-        face.boundingBox.top * scaleY,
-        face.boundingBox.right * scaleX,
-        face.boundingBox.bottom * scaleY,
-      );
+//     for (Face face in faces) {
+//       final rect = Rect.fromLTRB(
+//         face.boundingBox.left * scaleX,
+//         face.boundingBox.top * scaleY,
+//         face.boundingBox.right * scaleX,
+//         face.boundingBox.bottom * scaleY,
+//       );
 
-      canvas.drawRect(
-        rect,
-        Paint()
-          ..color = Colors.red
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3.0,
-      );
-    }
-  }
+//       canvas.drawRect(
+//         rect,
+//         Paint()
+//           ..color = Colors.red
+//           ..style = PaintingStyle.stroke
+//           ..strokeWidth = 3.0,
+//       );
+//     }
+//   }
 
-  @override
-  bool shouldRepaint(FacePainter oldDelegate) {
-    return oldDelegate.faces != faces;
-  }
-}
+//   @override
+//   bool shouldRepaint(FacePainter oldDelegate) {
+//     return oldDelegate.faces != faces;
+//   }
+// }
