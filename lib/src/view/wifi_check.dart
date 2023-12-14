@@ -47,8 +47,8 @@ class _WifiCheckState extends State<WifiCheck> {
     return Scaffold(
       body: Stack(
         children: <Widget>[
-          LoadingFlipping.square(
-            borderColor: Colors.cyan,
+          LoadingFlipping.circle(
+            borderColor: Colors.purple,
             size: 100,
           ),
           Center(
