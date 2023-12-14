@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -20,13 +21,11 @@ class _HomeState extends State<Home> {
   late bool isLandscape;
   late bool isToggle;
   late bool detected;
+  late bool isBusy;
 
   Vision vision = GoogleMlKit.vision;
-  FaceDetector faceDetector = GoogleMlKit.vision.faceDetector();
+  late FaceDetector faceDetector;
   List<Face> faces = [];
-
-  late StreamController _streamController;
-  late Stream _broadcastStream;
 
   @override
   void initState() {
@@ -34,18 +33,8 @@ class _HomeState extends State<Home> {
     isLandscape = false;
     isToggle = false;
     detected = false;
-    faceDetector = GoogleMlKit.vision.faceDetector();
-
-    // StreamController를 초기화합니다. 이것은 브로드캐스트 스트림을 만듭니다.
-    _streamController = StreamController.broadcast();
-
-    // 원래 스트림에서 오는 데이터를 새로운 브로드캐스트 스트림으로 전달합니다.
-    widget.channel.stream.listen((data) {
-      _streamController.add(data);
-    });
-
-    // 브로드캐스트 스트림을 할당합니다.
-    _broadcastStream = _streamController.stream;
+    isBusy = false;
+    faceDetector = FaceDetector(options: FaceDetectorOptions());
   }
 
   @override
@@ -53,37 +42,29 @@ class _HomeState extends State<Home> {
     super.dispose();
     widget.channel.sink.close();
     faceDetector.close();
-    _streamController.close(); // StreamController도 닫아야 합니다.
     super.dispose();
   }
 
-  Future<List<Face>> detectFaces(ui.Image image) async {
-    final byteData = await image.toByteData();
-    if (byteData == null) {
-      return []; // 널 데이터 처리
-    }
-
-    final detectedFaces =
-        await faceDetector.processImage(byteData as InputImage);
-    return detectedFaces;
-  }
-
-  void startFaceDetection() async {
-    final imageBytes = await widget.channel.stream.first;
-    widget.channel.sink.close(); // 이전 스트림 닫기
-
-    final codec = await ui.instantiateImageCodec(imageBytes);
-    final frame = await codec.getNextFrame();
-    final image = frame.image;
-
-    // 얼굴 인식 수행
-    final byteData = await image.toByteData();
-    final detectedFaces =
-        await faceDetector.processImage(byteData as InputImage);
-
-    setState(() {
-      faces = detectedFaces;
-      detected = true; // 얼굴 인식 완료 상태 업데이트
+  void detectFaces(Uint8List bytes) async {
+    int bytesPerRow = videoWidth.toInt();
+    isBusy = true;
+    // Android에서 흔히 사용되는 이미지 포맷으로 설정
+    InputImageFormat imageFormat = InputImageFormat.nv21;
+    faceDetector
+        .processImage(InputImage.fromBytes(
+            bytes: bytes,
+            metadata: InputImageMetadata(
+                size: Size(videoWidth, videoHeight),
+                rotation: InputImageRotation.rotation0deg,
+                format: imageFormat,
+                bytesPerRow: bytesPerRow)))
+        .then((faces) {
+      if (faces.length == 0) {
+        print("얼굴아님");
+      } else {
+        print("얼굴임");
+      }
+      isBusy = false;
     });
   }
 
@@ -106,14 +87,10 @@ class _HomeState extends State<Home> {
             ? screenHeight
             : videoHeight * screenHeight / videoHeight;
 
-        if (!detected) {
-          startFaceDetection(); // 얼굴 인식 시작
-        }
-
         return Container(
           color: Colors.black,
           child: StreamBuilder(
-            stream: _broadcastStream,
+            stream: widget.channel.stream,
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
                 return const Center(
@@ -122,6 +99,7 @@ class _HomeState extends State<Home> {
                   ),
                 );
               } else {
+                detectFaces(snapshot.data);
                 return CustomPaint(
                   foregroundPainter: FacePainter(faces),
                   child: Image.memory(
