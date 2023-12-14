@@ -24,7 +24,7 @@ class _HomeState extends State<Home> {
   late bool isBusy;
 
   Vision vision = GoogleMlKit.vision;
-  late FaceDetector faceDetector;
+  late ObjectDetector objectDetector;
   List<Face> faces = [];
 
   @override
@@ -34,14 +34,19 @@ class _HomeState extends State<Home> {
     isToggle = false;
     detected = false;
     isBusy = false;
-    faceDetector = FaceDetector(options: FaceDetectorOptions());
+
+    objectDetector = ObjectDetector(
+        options: ObjectDetectorOptions(
+            mode: DetectionMode.stream,
+            classifyObjects: true,
+            multipleObjects: true));
   }
 
   @override
   void dispose() {
     super.dispose();
     widget.channel.sink.close();
-    faceDetector.close();
+    objectDetector.close();
     super.dispose();
   }
 
@@ -49,20 +54,25 @@ class _HomeState extends State<Home> {
     int bytesPerRow = videoWidth.toInt();
     isBusy = true;
     // Android에서 흔히 사용되는 이미지 포맷으로 설정
-    InputImageFormat imageFormat = InputImageFormat.nv21;
-    faceDetector
+    objectDetector
         .processImage(InputImage.fromBytes(
             bytes: bytes,
             metadata: InputImageMetadata(
                 size: Size(videoWidth, videoHeight),
                 rotation: InputImageRotation.rotation0deg,
-                format: imageFormat,
+                format: InputImageFormat.bgra8888,
                 bytesPerRow: bytesPerRow)))
-        .then((faces) {
-      if (faces.length == 0) {
+        .then((objects) {
+      if (objects.isEmpty) {
         print("얼굴아님");
+        setState(() {
+          detected = false;
+        });
       } else {
         print("얼굴임");
+        setState(() {
+          detected = true;
+        });
       }
       isBusy = false;
     });
@@ -87,31 +97,38 @@ class _HomeState extends State<Home> {
             ? screenHeight
             : videoHeight * screenHeight / videoHeight;
 
-        return Container(
-          color: Colors.black,
-          child: StreamBuilder(
-            stream: widget.channel.stream,
-            builder: (context, snapshot) {
-              if (!snapshot.hasData) {
-                return const Center(
-                  child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                );
-              } else {
-                detectFaces(snapshot.data);
-                return CustomPaint(
-                  foregroundPainter: FacePainter(faces),
-                  child: Image.memory(
+        return StreamBuilder(
+          stream: widget.channel.stream,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              );
+            } else {
+              detectFaces(snapshot.data);
+              return Stack(
+                children: [
+                  (detected)
+                      ? const Positioned(
+                          bottom: 200,
+                          right: 10,
+                          child: Text(
+                            "객체가 나타났어요 ~~",
+                            style: TextStyle(fontSize: 40),
+                          ))
+                      : Container(),
+                  Image.memory(
                     snapshot.data,
                     gaplessPlayback: true,
                     width: newVideoSizeWidth,
                     height: newVideoSizeHeight,
                   ),
-                );
-              }
-            },
-          ),
+                ],
+              );
+            }
+          },
         );
       }),
     );
