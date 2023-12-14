@@ -21,9 +21,12 @@ class _HomeState extends State<Home> {
   late bool isToggle;
   late bool detected;
 
-  GoogleMlKit vision = GoogleMlKit.vision as GoogleMlKit;
-  late FaceDetector faceDetector;
+  Vision vision = GoogleMlKit.vision;
+  FaceDetector faceDetector = GoogleMlKit.vision.faceDetector();
   List<Face> faces = [];
+
+  late StreamController _streamController;
+  late Stream _broadcastStream;
 
   @override
   void initState() {
@@ -32,20 +35,32 @@ class _HomeState extends State<Home> {
     isToggle = false;
     detected = false;
     faceDetector = GoogleMlKit.vision.faceDetector();
+
+    // StreamController를 초기화합니다. 이것은 브로드캐스트 스트림을 만듭니다.
+    _streamController = StreamController.broadcast();
+
+    // 원래 스트림에서 오는 데이터를 새로운 브로드캐스트 스트림으로 전달합니다.
+    widget.channel.stream.listen((data) {
+      _streamController.add(data);
+    });
+
+    // 브로드캐스트 스트림을 할당합니다.
+    _broadcastStream = _streamController.stream;
   }
 
   @override
   void dispose() {
+    super.dispose();
     widget.channel.sink.close();
     faceDetector.close();
+    _streamController.close(); // StreamController도 닫아야 합니다.
     super.dispose();
   }
 
   Future<List<Face>> detectFaces(ui.Image image) async {
     final byteData = await image.toByteData();
     if (byteData == null) {
-      // 널 데이터 처리
-      return [];
+      return []; // 널 데이터 처리
     }
 
     final detectedFaces =
@@ -55,20 +70,21 @@ class _HomeState extends State<Home> {
 
   void startFaceDetection() async {
     final imageBytes = await widget.channel.stream.first;
+    widget.channel.sink.close(); // 이전 스트림 닫기
+
     final codec = await ui.instantiateImageCodec(imageBytes);
     final frame = await codec.getNextFrame();
     final image = frame.image;
 
+    // 얼굴 인식 수행
     final byteData = await image.toByteData();
     final detectedFaces =
         await faceDetector.processImage(byteData as InputImage);
 
     setState(() {
       faces = detectedFaces;
-      detected = true;
+      detected = true; // 얼굴 인식 완료 상태 업데이트
     });
-
-    startFaceDetection(); // 계속해서 얼굴 인식을 수행하도록 재귀 호출
   }
 
   @override
@@ -97,7 +113,7 @@ class _HomeState extends State<Home> {
         return Container(
           color: Colors.black,
           child: StreamBuilder(
-            stream: widget.channel.stream,
+            stream: _broadcastStream,
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
                 return const Center(
